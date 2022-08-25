@@ -7,6 +7,13 @@
 
             var onLoginSuccess = function (response) {
                 var data = response.data;
+                localStorageService.addToLocalStorage('tokendetails', {
+                        "expires_in": data.expiresIn,
+                        "access_token": data.accessToken,
+                        "refresh_token": data.refreshToken
+                    }
+                );
+                setTimer(data.expires_in);
                 if(data.isTwoFactorAuthenticationRequired != null && data.isTwoFactorAuthenticationRequired == true) {
                     if(hasValidTwoFactorToken(data.username)) {
                         var token = getTokenFromStorage(data.username);
@@ -29,16 +36,6 @@
 
             var apiVer = '/fineract-provider/api/v1';
 
-            var getUserDetails = function(response){
-                var data = response.data;
-                localStorageService.addToLocalStorage('tokendetails', data);
-                setTimer(data.expires_in);
-                httpService.get( apiVer + "/userdetails?access_token=" + data.access_token)
-                    .then(onLoginSuccess)
-                    .catch(onLoginFailure);
-
-            }
-
             var updateAccessDetails = function(response){
                 var data = response.data;
                 var sessionData = webStorage.get('sessionData');
@@ -58,16 +55,19 @@
 
             var getAccessToken = function(){
                 var refreshToken = localStorageService.getFromLocalStorage("tokendetails").refresh_token;
-                httpService.cancelAuthorization();
-                httpService.post( "/fineract-provider/api/oauth/token?&client_id=community-app&grant_type=refresh_token&client_secret=123&refresh_token=" + refreshToken)
-                    .then(updateAccessDetails);
+                //httpService.cancelAuthorization();
+                //TODO:- Innocent implement refresh token logic
+                // httpService.post( "/fineract-provider/api/oauth/token?&client_id=community-app&grant_type=refresh_token&client_secret=123&refresh_token=" + refreshToken)
+                //     .then(updateAccessDetails);
+                //TODO: - Innocent logout user when there couldn't get token
             }
 
             this.authenticateWithUsernamePassword = function (credentials) {
                 scope.$broadcast("UserAuthenticationStartEvent");
         		if(SECURITY === 'oauth'){
-	                httpService.post( "/fineract-provider/api/oauth/token?username=" + credentials.username + "&password=" + credentials.password +"&client_id=community-app&grant_type=password&client_secret=123")
-                    .then(getUserDetails)
+                    httpService.post(apiVer + "/authentication", { "username": credentials.username, "password": credentials.password})
+	                // httpService.post( "/fineract-provider/api/oauth/token?username=" + credentials.username + "&password=" + credentials.password +"&client_id=community-app&grant_type=password&client_secret=123")
+                    .then(onLoginSuccess)
                     .catch(onLoginFailure);
         		} else {
                     httpService.post(apiVer + "/authentication", { "username": credentials.username, "password": credentials.password})

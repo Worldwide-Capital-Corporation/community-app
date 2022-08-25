@@ -8,6 +8,7 @@
 		        var accessToken = null;
                 if(isOauth){
                     accessToken = localStorageService.getFromLocalStorage("tokendetails").access_token;
+                    httpService.setAuthorization(accessToken, true);
                 }
                 if (data.shouldRenewPassword) {
                     if(isOauth){
