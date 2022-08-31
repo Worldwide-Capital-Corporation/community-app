@@ -52,7 +52,7 @@ module.exports = function(grunt) {
             port:  9002,
             hostname: 'localhost',
             livereload: 35729,
-            open:'http://<%= connect.options.hostname %>:<%= connect.options.port %>?baseApiUrl=https://demo.mifos.io'
+            open:'http://<%= connect.options.hostname %>:<%= connect.options.port %>'
         },
         livereload: {
             options: {
