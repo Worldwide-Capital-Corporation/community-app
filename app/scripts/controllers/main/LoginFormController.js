@@ -13,12 +13,13 @@
             scope.otpToken = null;
             scope.selectedDeliveryMethodName = null;
             scope.twofactorRememberMe = false;
+            scope.timeoutWarningMessage ='warning.login.session.timeout';
 
             scope.login = function () {
                 scope.authenticationFailed = false;
                 scope.load = true;
                 authenticationService.authenticateWithUsernamePassword(scope.loginCredentials);
-               // delete scope.loginCredentials.password;
+                delete scope.loginCredentials.password;
             };
 
             scope.$on("UserAuthenticationFailureEvent", function (event, data, status) {

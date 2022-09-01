@@ -7,6 +7,13 @@
 
             var onLoginSuccess = function (response) {
                 var data = response.data;
+                localStorageService.addToLocalStorage('tokendetails', {
+                        "expires_in": data.expiresIn,
+                        "access_token": data.accessToken,
+                        "refresh_token": data.refreshToken
+                    }
+                );
+                setTimer(data.expires_in);
                 if(data.isTwoFactorAuthenticationRequired != null && data.isTwoFactorAuthenticationRequired == true) {
                     if(hasValidTwoFactorToken(data.username)) {
                         var token = getTokenFromStorage(data.username);
@@ -27,29 +34,29 @@
                 scope.$broadcast("UserAuthenticationFailureEvent", data, status);
             };
 
-            var apiVer = '/fineract-provider/api/v1';
-
-            var getUserDetails = function(response){
+            var onRefreshTokenFailure = function (response) {
                 var data = response.data;
-                localStorageService.addToLocalStorage('tokendetails', data);
-                setTimer(data.expires_in);
-                httpService.get( apiVer + "/userdetails?access_token=" + data.access_token)
-                    .then(onLoginSuccess)
-                    .catch(onLoginFailure);
+                var status = response.status;
+                scope.$broadcast("RefreshTokenFailureEvent", data, status);
+                console.error("Error refreshing token,status code: ", status);
+            };
 
-            }
+            var apiVer = '/fineract-provider/api/v1';
 
             var updateAccessDetails = function(response){
                 var data = response.data;
                 var sessionData = webStorage.get('sessionData');
-                sessionData.authenticationKey = data.access_token;
+                sessionData.authenticationKey = data.accessToken;
                 webStorage.add("sessionData",sessionData);
-                localStorageService.addToLocalStorage('tokendetails', data);
+                localStorageService.addToLocalStorage('tokendetails', {
+                    "expires_in": data.expiresIn,
+                    "access_token": data.accessToken,
+                    "refresh_token": data.refreshToken
+                });
                 var userDate = localStorageService.getFromLocalStorage("userData");
-                userDate.accessToken =  data.access_token;
+                userDate.accessToken = data.accessToken;
                 localStorageService.addToLocalStorage('userData', userDate);
-                httpService.setAuthorization(data.access_token);
-                setTimer(data.expires_in);
+                httpService.setAuthorization(data.accessToken, true);
             }
 
             var setTimer = function(time){
@@ -58,16 +65,19 @@
 
             var getAccessToken = function(){
                 var refreshToken = localStorageService.getFromLocalStorage("tokendetails").refresh_token;
-                httpService.cancelAuthorization();
-                httpService.post( "/fineract-provider/api/oauth/token?&client_id=community-app&grant_type=refresh_token&client_secret=123&refresh_token=" + refreshToken)
-                    .then(updateAccessDetails);
+                var accessToken = localStorageService.getFromLocalStorage("tokendetails").access_token;
+                httpService.setAuthorization(refreshToken, true);
+                httpService.post(apiVer + "/refreshtoken")
+                    .then(updateAccessDetails)
+                    .catch(onRefreshTokenFailure)
+                httpService.setAuthorization(accessToken, true);
             }
 
             this.authenticateWithUsernamePassword = function (credentials) {
                 scope.$broadcast("UserAuthenticationStartEvent");
         		if(SECURITY === 'oauth'){
-	                httpService.post( "/fineract-provider/api/oauth/token?username=" + credentials.username + "&password=" + credentials.password +"&client_id=community-app&grant_type=password&client_secret=123")
-                    .then(getUserDetails)
+                    httpService.post(apiVer + "/authentication", { "username": credentials.username, "password": credentials.password})
+                    .then(onLoginSuccess)
                     .catch(onLoginFailure);
         		} else {
                     httpService.post(apiVer + "/authentication", { "username": credentials.username, "password": credentials.password})
@@ -150,6 +160,7 @@
 
                 // Remove user data and two-factor access token if present
                 localStorageService.removeFromLocalStorage("userData");
+                localStorageService.removeFromLocalStorage("tokendetails");
                 removeTwoFactorTokenFromStorage(userDate.username);
 
                 httpService.post(apiVer + "/twofactor/invalidate", '{"token": "' + twoFactorAccessToken + '"}');

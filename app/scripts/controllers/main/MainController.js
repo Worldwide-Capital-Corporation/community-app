@@ -1,7 +1,7 @@
 (function (module) {
     mifosX.controllers = _.extend(module, {
         MainController: function (scope, location, sessionManager, translate, $rootScope, localStorageService, keyboardManager, $idle, tmhDynamicLocale,
-                  uiConfigService, $http) {
+                  uiConfigService, $http, $uibModal) {
             $http.get('release.json').then(function onSuccess(response) {
                 var data = response.data;
                 scope.version = data.version;
@@ -14,30 +14,31 @@
             scope.isHeaderLogoPath = false;
             scope.isBigLogoPath = false;
             scope.isLargeLogoPath = false;
+            scope.sessionTimedOut = false;
 
-            if(!scope.islogofoldernamefetched && $rootScope.tenantIdentifier && $rootScope.tenantIdentifier != "default"){
+            if (!scope.islogofoldernamefetched && $rootScope.tenantIdentifier && $rootScope.tenantIdentifier != "default") {
                 scope.islogofoldernamefetched = true;
                 $http.get('scripts/config/LogoConfig.json').then(function onSuccess(response) {
                     var datas = response.data;
-                    for(var i in datas){
+                    for (var i in datas) {
                         var data = datas[i];
-                        if(data.tenantIdentifier != undefined && data.tenantIdentifier == $rootScope.tenantIdentifier){
-                            if(data.logofoldername != undefined && data.logofoldername != ""){
+                        if (data.tenantIdentifier != undefined && data.tenantIdentifier == $rootScope.tenantIdentifier) {
+                            if (data.logofoldername != undefined && data.logofoldername != "") {
                                 scope.islogofoldernameconfig = true;
                                 scope.logofoldername = data.logofoldername;
-                                if(data.faviconPath){
+                                if (data.faviconPath) {
                                     scope.isFaviconPath = true;
                                     scope.faviconPath = data.faviconPath;
                                 }
-                                if(data.bigLogoPath){
+                                if (data.bigLogoPath) {
                                     scope.isBigLogoPath = true;
                                     scope.bigLogoPath = data.bigLogoPath;
                                 }
-                                if(data.headerLogoPath){
+                                if (data.headerLogoPath) {
                                     scope.isHeaderLogoPath = true;
                                     scope.headerLogoPath = data.headerLogoPath;
                                 }
-                                if(data.largeLogoPath){
+                                if (data.largeLogoPath) {
                                     scope.isLargeLogoPath = true;
                                     scope.largeLogoPath = data.largeLogoPath;
                                 }
@@ -48,18 +49,18 @@
                     console.warn("Error: ", response.data)
                 });
             }
-            
-            scope.$on('scrollbar.show', function(){
-                  console.log('Scrollbar show');
-                });
-            scope.$on('scrollbar.hide', function(){
-                  console.log('Scrollbar hide');
-                });
+
+            scope.$on('scrollbar.show', function () {
+                console.log('Scrollbar show');
+            });
+            scope.$on('scrollbar.hide', function () {
+                console.log('Scrollbar hide');
+            });
 
             uiConfigService.init(scope);
-            
-            
-            scope.$on('configJsonObj',function(e,response){
+
+
+            scope.$on('configJsonObj', function (e, response) {
                 scope.response = response;
             });
             //hides loader
@@ -89,7 +90,7 @@
                 scope.dft = scope.dateformat + ' ' + 'HH:mm:ss'
             };
 
-            scope.updateDf = function(dateFormat){
+            scope.updateDf = function (dateFormat) {
                 localStorageService.addToLocalStorage('dateformat', dateFormat);
                 scope.dateformat = dateFormat;
                 scope.setDf();
@@ -137,10 +138,60 @@
             //Logout the user if Idle
             scope.started = false;
             scope.$on('$idleTimeout', function () {
+                timeoutPopupShowing = false;
                 scope.logout();
                 $idle.unwatch();
+                scope.sessionTimedOut = true;
                 scope.started = false;
             });
+
+            var timeoutPopupShowing = false;
+            var timer;
+            var countDownTimer;
+            var localModalInstance;
+            scope.$on('$idleWarn', function (countdown, time) {
+                if (!timeoutPopupShowing) {
+                    timeoutPopupShowing = true;
+                    timer = time;
+                    $rootScope.timeOutCounter = timer;
+                    $uibModal.open({
+                        backdrop: 'static',
+                        keyboard: false,
+                        templateUrl: 'timeout.html',
+                        controller: SessionTimeOutCtrl
+                    });
+                    countDownTimer = setInterval(function (){
+                        timer--;
+                        $rootScope.timeOutCounter = timer;
+                        if (timer === 0) {
+                            localModalInstance.dismiss('cancel');
+                            timeoutPopupShowing = false;
+                            scope.logout();
+                            $idle.unwatch();
+                            scope.sessionTimedOut = true;
+                            scope.started = false;
+                        }
+                    }, 1000);
+                }
+            });
+
+            var SessionTimeOutCtrl = function ($scope, $uibModalInstance) {
+                localModalInstance = $uibModalInstance;
+                $scope.continue = function () {
+                    scope.sessionTimedOut = false;
+                    clearTimeout(countDownTimer);
+                    $uibModalInstance.dismiss('cancel');
+                    timeoutPopupShowing = false;
+                };
+
+                $scope.close = function () {
+                    timeoutPopupShowing = false;
+                    scope.logout();
+                    $idle.unwatch();
+                    $uibModalInstance.dismiss('cancel');
+                    scope.started = false;
+                };
+            };
 
             // Log out the user when the window/tab is closed.
             window.onunload = function () {
@@ -150,9 +201,12 @@
             };
 
             scope.start = function (session) {
-                if (session) {
+
+                if (session && session.user != null) {
                     $idle.watch();
                     scope.started = true;
+                } else {
+                    $idle.unwatch();
                 }
             };
 
@@ -222,8 +276,11 @@
             '<span>Sounds interesting?<a href="http://mifos.org/take-action/volunteer/"> Get involved!</a></span>';
 
             scope.logout = function () {
+                $idle.unwatch();
                 $rootScope.$broadcast("OnUserPreLogout");
                 scope.currentSession = sessionManager.clear();
+                scope.sessionTimedOut = false;
+                clearTimeout(countDownTimer);
                 scope.resetPassword = false;
                 location.path('/').replace();
             };
@@ -441,6 +498,7 @@
         'tmhDynamicLocale',
         'UIConfigService',
         '$http',
+        '$uibModal',
         mifosX.controllers.MainController
     ]).run(function ($log) {
         $log.info("MainController initialized");

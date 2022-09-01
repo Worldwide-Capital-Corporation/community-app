@@ -28,9 +28,6 @@
 
             };
         }
-
-
-
     });
 
     mifosX.ng.services.service('UIConfigService', ['$q','$http','$templateCache',mifosX.services.UIConfigService]).run(function ($log) {
